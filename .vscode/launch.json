@@ -1,0 +1,21 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch (x86_64)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build_x64",
+            "program": "${workspaceFolder}/src/hubservice/bin/Debug/net5.0/linux-x64/hubservice.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/hubservice",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}

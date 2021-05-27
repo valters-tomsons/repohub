@@ -3,7 +3,7 @@
 [Oo]bj/
 
 # Visual Studio Code Files
-.vscode/*
+.vscode/settings.json
 
 # Local files
 appsettings.Development.json
