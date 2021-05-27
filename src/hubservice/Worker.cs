@@ -91,12 +91,10 @@ namespace hubservice
                 var remote = repo.Network.Remotes["origin"];
                 var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
 
+                Console.WriteLine("Resetting repository to HEAD");
+
                 var msg = string.Empty;
                 Commands.Fetch(repo, remote.Name, refSpecs, null, msg);
-                Console.WriteLine($"Fetch result: '{msg}'");
-
-                var commit = repo.Commits.FirstOrDefault();
-                Console.WriteLine("Resetting repository to HEAD");
                 repo.Reset(ResetMode.Hard);
             }
 
@@ -113,7 +111,11 @@ namespace hubservice
             Directory.SetCurrentDirectory(packageDir);
 
             var makePkg = new Process(){
-                StartInfo = new ProcessStartInfo("/usr/bin/makepkg")
+                StartInfo = new ProcessStartInfo()
+                {
+                    FileName = "/usr/bin/makepkg",
+                    Arguments = "--clean"
+                }
             };
 
             makePkg.Start();
