@@ -1,0 +1,9 @@
+# Build Results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio Code Files
+.vscode/*
+
+# Local files
+appsettings.Development.json
