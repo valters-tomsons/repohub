@@ -1,10 +1,12 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using hubservice.Models;
+using LibGit2Sharp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,49 +27,83 @@ namespace hubservice
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                _logger.LogInformation("Starting build operations");
 
-            var packagesContent = await File.ReadAllTextAsync(_config.GetValue<string>("package.json"), Encoding.UTF8, stoppingToken);
-            var packages = JsonConvert.DeserializeObject<PackageIndex>(packagesContent);
+                var packagesContent = await File.ReadAllTextAsync(_config.GetValue<string>("package.json"), Encoding.UTF8, stoppingToken);
+                var packages = JsonConvert.DeserializeObject<PackageIndex>(packagesContent);
 
-            await CloneGitRepository(packages.Git.aarch64[0]);
-            await BuildGitPackage(packages.Git.aarch64[0]);
+                var cloned = CloneGitRepository(packages.Git.aarch64[0]);
 
-            Environment.Exit(0);
+                if (cloned)
+                {
+                    var result = await BuildGitPackage(packages.Git.aarch64[0]);
+                    _logger.LogInformation($"Package result: {result}");
+                }
+                else{
+                    _logger.LogError("Failed to clone repository, not building...");
+                }
 
-            // while (!stoppingToken.IsCancellationRequested)
-            // {
-            //     _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-
-            //     var packagesContent = await File.ReadAllTextAsync("/home/internal.visma.com/valters.tomsons/Source/faith-arch/packages.json", Encoding.UTF8, stoppingToken);
-            //     var packages = JsonSerializer.Deserialize<object>(packagesContent);
-
-            //     await Task.Delay(10000, stoppingToken);
-            // }
+                await Task.Delay(_config.GetValue<TimeSpan>("ScanFrequency"), stoppingToken);
+            }
         }
 
-        private async Task CloneGitRepository(string gitUrl)
+        private bool CloneGitRepository(string gitUrl)
         {
             var home = Environment.GetEnvironmentVariable("HOME");
+
             var packageName = PackageNameFromUrl(gitUrl);
+            if(string.IsNullOrWhiteSpace(packageName))
+            {
+                Console.WriteLine("Invalid package name, skipping...");
+                return false;
+            }
 
-            var packageDir = $"{home}/.local/share/repohub/git";
-            Console.WriteLine($"Cloning {packageName} in '{packageDir}'");
+            var targetDir = $"{home}/.local/share/repohub/git/{packageName}";
+            var failedToClone = false;
 
-            Directory.CreateDirectory(packageDir);
-            Directory.SetCurrentDirectory(packageDir);
+            try
+            {
+                Console.WriteLine($"Cloning '{packageName} into '{targetDir}'");
+                Repository.Clone(gitUrl, targetDir);
+            }
+            catch(NameConflictException)
+            {
+                Console.WriteLine($"Repository '{packageName}' already exists");
+                failedToClone = true;
+            }
 
-            var git = new Process(){
-                StartInfo = new ProcessStartInfo("/usr/bin/git", $"clone {gitUrl}")
-            };
+            if(!failedToClone)
+            {
+                return true;
+            }
 
-            git.Start();
+            var validRepo = Repository.IsValid(targetDir);
 
-            await git.WaitForExitAsync();
-            git.WaitForExit();
+            if(!validRepo)
+            {
+                Directory.Delete(targetDir);
+            }
+
+            using(var repo = new Repository(targetDir))
+            {
+                var remote = repo.Network.Remotes["origin"];
+                var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
+
+                var msg = string.Empty;
+                Commands.Fetch(repo, remote.Name, refSpecs, null, msg);
+                Console.WriteLine($"Fetch result: '{msg}'");
+
+                var commit = repo.Commits.FirstOrDefault();
+                Console.WriteLine("Resetting repository to HEAD");
+                repo.Reset(ResetMode.Hard);
+            }
+
+            return true;
         }
 
-        private async Task BuildGitPackage(string gitUrl)
+        private async Task<Uri> BuildGitPackage(string gitUrl)
         {
             var packageName = PackageNameFromUrl(gitUrl);
 
@@ -84,6 +120,11 @@ namespace hubservice
 
             await makePkg.WaitForExitAsync();
             makePkg.WaitForExit();
+
+            var tarballs = Directory.GetFiles(packageDir, $"{packageName}-*.pkg.tar.zst");
+            var tarName = Path.GetFileName(tarballs[0]);
+
+            return new Uri($"{packageDir}/{tarName}");
         }
 
         private string PackageNameFromUrl(string gitUrl)
