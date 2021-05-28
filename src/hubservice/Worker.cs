@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -110,6 +111,9 @@ namespace hubservice
 
             Directory.SetCurrentDirectory(packageDir);
 
+            var pkgdest = $"{home}/.local/share/repohub/packages/";
+            Environment.SetEnvironmentVariable("PKGDEST", pkgdest);
+
             var makePkg = new Process(){
                 StartInfo = new ProcessStartInfo()
                 {
@@ -123,10 +127,33 @@ namespace hubservice
             await makePkg.WaitForExitAsync();
             makePkg.WaitForExit();
 
-            var tarballs = Directory.GetFiles(packageDir, $"{packageName}-*.pkg.tar.zst");
-            var tarName = Path.GetFileName(tarballs[0]);
+            var pkgPath = await PackageList();
 
-            return new Uri($"{packageDir}/{tarName}");
+            return new Uri(pkgPath, UriKind.Absolute);
+        }
+
+        private async Task<string> PackageList()
+        {
+            var pkgList = new Process(){
+                StartInfo = new ProcessStartInfo()
+                {
+                    FileName = "/usr/bin/makepkg",
+                    Arguments = "--packagelist",
+                    RedirectStandardOutput = true
+                }
+            };
+
+            var pkgResult = new StringBuilder();
+            pkgList.OutputDataReceived += (sender, e) => pkgResult.Append(e.Data);
+
+            pkgList.Start();
+
+            pkgList.BeginOutputReadLine();
+
+            await pkgList.WaitForExitAsync();
+            pkgList.WaitForExit();
+
+            return pkgResult.ToString();
         }
 
         private string PackageNameFromUrl(string gitUrl)
