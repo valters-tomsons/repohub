@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using hubservice.Enums;
 using hubservice.Models;
 using LibGit2Sharp;
 using Microsoft.Extensions.Configuration;
@@ -32,82 +33,72 @@ namespace hubservice
             {
                 _logger.LogInformation("Starting build operations");
 
-                var packagesContent = await File.ReadAllTextAsync(_config.GetValue<string>("package.json"), Encoding.UTF8, stoppingToken);
-                var packages = JsonConvert.DeserializeObject<PackageIndex>(packagesContent);
+                var packagesContent = await File.ReadAllTextAsync(_config.GetValue<string>("packages.json"), Encoding.UTF8, stoppingToken);
+                var packagesDef = JsonConvert.DeserializeObject<List<ArchDefinition>>(packagesContent);
 
-                var cloned = CloneGitRepository(packages.Git.aarch64[0]);
+                var packages = BuildArchPackageIndex(packagesDef, Arch.x86_64);
+                var pkg = packages.ElementAt(1);
+                var path = ClonePackageRepository(pkg);
 
-                if (cloned)
+                if (path != null)
                 {
-                    var result = await BuildGitPackage(packages.Git.aarch64[0]);
-                    _logger.LogInformation($"Package result: {result}");
+                    var result = await BuildPackage(pkg);
+
+                    if(result != default)
+                    {
+                        _logger.LogInformation($"Package result: {result}");
+                    }
                 }
-                else{
+                else
+                {
                     _logger.LogError("Failed to clone repository, not building...");
                 }
 
-                await Task.Delay(_config.GetValue<TimeSpan>("ScanFrequency"), stoppingToken);
+                await Task.Delay(_config.GetValue<TimeSpan>("ScanFrequency"), stoppingToken).ConfigureAwait(false);
             }
         }
 
-        private bool CloneGitRepository(string gitUrl)
+        private IEnumerable<PackageDefinition> BuildArchPackageIndex(IEnumerable<ArchDefinition> definition, Arch targetArch)
+        {
+            var targetDef = definition.SingleOrDefault(x => x.Arch == targetArch);
+
+            var result = new List<PackageDefinition>();
+
+            var aurPkgs = targetDef.AurPackages.Select(x => new PackageDefinition(targetArch, SourceType.Aur, x));
+            var gitPkgs = targetDef.PkgGit.Select(x => new PackageDefinition(targetArch, SourceType.Git, x));
+
+            return aurPkgs.Concat(gitPkgs);
+        }
+
+        private string ClonePackageRepository(PackageDefinition package)
         {
             var home = Environment.GetEnvironmentVariable("HOME");
 
-            var packageName = PackageNameFromUrl(gitUrl);
-            if(string.IsNullOrWhiteSpace(packageName))
-            {
-                Console.WriteLine("Invalid package name, skipping...");
-                return false;
-            }
+            var packageName = package.Name;
+            var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
 
-            var targetDir = $"{home}/.local/share/repohub/git/{packageName}";
-            var failedToClone = false;
+            var targetDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
+
+            Console.WriteLine($"Cloning '{packageName} into '{targetDir}'");
 
             try
             {
-                Console.WriteLine($"Cloning '{packageName} into '{targetDir}'");
-                Repository.Clone(gitUrl, targetDir);
+                return Repository.Clone(package.Source, targetDir);
             }
-            catch(NameConflictException)
+            catch
             {
-                Console.WriteLine($"Repository '{packageName}' already exists");
-                failedToClone = true;
+                Console.WriteLine($"Failed to clone '{packageName}'");
+                return null;
             }
-
-            if(!failedToClone)
-            {
-                return true;
-            }
-
-            var validRepo = Repository.IsValid(targetDir);
-
-            if(!validRepo)
-            {
-                Directory.Delete(targetDir);
-            }
-
-            using(var repo = new Repository(targetDir))
-            {
-                var remote = repo.Network.Remotes["origin"];
-                var refSpecs = remote.FetchRefSpecs.Select(x => x.Specification);
-
-                Console.WriteLine("Resetting repository to HEAD");
-
-                var msg = string.Empty;
-                Commands.Fetch(repo, remote.Name, refSpecs, null, msg);
-                repo.Reset(ResetMode.Hard);
-            }
-
-            return true;
         }
 
-        private async Task<Uri> BuildGitPackage(string gitUrl)
+        private async Task<Uri> BuildPackage(PackageDefinition package)
         {
-            var packageName = PackageNameFromUrl(gitUrl);
+            var packageName = package.Name;
 
             var home = Environment.GetEnvironmentVariable("HOME");
-            var packageDir = $"{home}/.local/share/repohub/git/{packageName}";
+            var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
+            var packageDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
 
             Directory.SetCurrentDirectory(packageDir);
 
@@ -154,12 +145,6 @@ namespace hubservice
             pkgList.WaitForExit();
 
             return pkgResult.ToString();
-        }
-
-        private string PackageNameFromUrl(string gitUrl)
-        {
-            var result = gitUrl[(gitUrl.LastIndexOf('/') + 1)..];
-            return result.Replace(".git", string.Empty);
         }
     }
 }

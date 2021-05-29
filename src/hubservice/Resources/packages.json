@@ -1,0 +1,22 @@
+[
+    {
+        "arch": "x86_64",
+        "aurPackages": [
+            "dsbattery",
+            "plex-media-server"
+        ],
+        "pkgGit": [
+            "https://aur.archlinux.org/plex-media-server.git"
+        ]
+    },
+    {
+        "arch": "aarch64",
+        "aurPackages": [
+            "dsbattery",
+            "plex-media-server"
+        ],
+        "pkgGit": [
+            "https://gitlab.manjaro.org/manjaro-arm/packages/extra/plymouth.git"
+        ]
+    }
+]
