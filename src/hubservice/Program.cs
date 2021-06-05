@@ -1,3 +1,4 @@
+using hubservice.Providers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -17,6 +18,7 @@ namespace hubservice
                 {
                     services.AddSingleton(hostContext.Configuration);
                     services.AddHostedService<Worker>();
+                    services.AddTransient<AzureStorageProvider>();
                 });
     }
 }

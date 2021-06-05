@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using hubservice.Enums;
 using hubservice.Models;
+using hubservice.Providers;
 using LibGit2Sharp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -20,15 +21,20 @@ namespace hubservice
     {
         private readonly ILogger<Worker> _logger;
         private readonly IConfiguration _config;
+        private readonly AzureStorageProvider _storage;
 
-        public Worker(ILogger<Worker> logger, IConfiguration config)
+        public Worker(ILogger<Worker> logger, IConfiguration config, AzureStorageProvider storage)
         {
             _logger = logger;
             _config = config;
+
+            _storage = storage;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            await _storage.InitializeStorage().ConfigureAwait(false);
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 _logger.LogInformation("Starting build operations");
@@ -37,7 +43,8 @@ namespace hubservice
                 var packagesDef = JsonConvert.DeserializeObject<List<ArchDefinition>>(packagesContent);
 
                 var packages = BuildArchPackageIndex(packagesDef, Arch.x86_64);
-                var pkg = packages.ElementAt(1);
+                var pkg = packages.ElementAt(5);
+
                 var path = ClonePackageRepository(pkg);
 
                 if (path != null)
@@ -47,6 +54,10 @@ namespace hubservice
                     if(result != default)
                     {
                         _logger.LogInformation($"Package result: {result}");
+                        _logger.LogInformation("Uploading to repository...");
+
+                        await UploadPackage(pkg, result);
+                        await AppendPackage(pkg.Arch, result);
                     }
                 }
                 else
@@ -55,6 +66,81 @@ namespace hubservice
                 }
 
                 await Task.Delay(_config.GetValue<TimeSpan>("ScanFrequency"), stoppingToken).ConfigureAwait(false);
+            }
+        }
+
+        private async Task AppendPackage(Arch arch, Uri packagePath)
+        {
+            var home = Environment.GetEnvironmentVariable("HOME");
+
+            var path = packagePath.LocalPath;
+            var fileName = path[(path.LastIndexOf('/') + 1)..];
+
+            var repo = $"faith-arch/{arch}";
+            var localRepo = $"{home}/.local/share/repohub/repo";
+
+            await _storage.DownloadFileToDisk($"{repo}/faith-arch.db", $"{localRepo}/faith-arch.db").ConfigureAwait(false);
+            await _storage.DownloadFileToDisk($"{repo}/faith-arch.db.tar.gz", $"{localRepo}/faith-arch.db.tar.gz").ConfigureAwait(false);
+            await _storage.DownloadFileToDisk($"{repo}/faith-arch.files", $"{localRepo}/faith-arch.files").ConfigureAwait(false);
+            await _storage.DownloadFileToDisk($"{repo}/faith-arch.files.tar.gz", $"{localRepo}/faith-arch.files.tar.gz").ConfigureAwait(false);
+
+            Directory.SetCurrentDirectory(localRepo);
+
+            var repoAdd = new Process(){
+                StartInfo = new ProcessStartInfo()
+                {
+                    FileName = "/usr/bin/repo-add",
+                    Arguments = $"./faith-arch.db.tar.gz {packagePath.LocalPath}"
+                }
+            };
+
+            repoAdd.Start();
+
+            await repoAdd.WaitForExitAsync().ConfigureAwait(false);
+            repoAdd.WaitForExit();
+
+            await _storage.WriteFileToStorage($"{repo}/faith-arch.db", $"{localRepo}/faith-arch.db").ConfigureAwait(false);
+            await _storage.WriteFileToStorage($"{repo}/faith-arch.db.tar.gz", $"{localRepo}/faith-arch.db.tar.gz").ConfigureAwait(false);
+            await _storage.WriteFileToStorage($"{repo}/faith-arch.files", $"{localRepo}/faith-arch.files").ConfigureAwait(false);
+            await _storage.WriteFileToStorage($"{repo}/faith-arch.files.tar.gz", $"{localRepo}/faith-arch.files.tar.gz").ConfigureAwait(false);
+        }
+
+        private async Task UploadPackage(PackageDefinition packageDef, Uri packagePath, CancellationToken cancellationToken = default)
+        {
+            var path = packagePath.LocalPath;
+            var fileName = path[(path.LastIndexOf('/') + 1)..];
+
+            if(!fileName.Contains(".pkg"))
+            {
+                _logger.LogWarning("Not valid pkg file");
+                return;
+            }
+
+            if(!fileName.Contains($"{packageDef.Arch}"))
+            {
+                _logger.LogWarning("Arch mismatch");
+                return;
+            }
+
+            if(!fileName.StartsWith($"{packageDef.Name}"))
+            {
+                _logger.LogWarning("Arch mismatch");
+                return;
+            }
+
+            var repoPath = $"faith-arch/{packageDef.Arch}/{fileName}";
+            var existsInRepository = await _storage.FileExists(repoPath);
+
+            if(!existsInRepository && File.Exists(path))
+            {
+                var packageContent = await File.ReadAllBytesAsync(path, cancellationToken);
+                await _storage.WriteDataToStorage(repoPath, packageContent);
+
+                _logger.LogInformation("Package uploaded!");
+            }
+            else
+            {
+                _logger.LogWarning($"Not uploading '{fileName}' at '{path}'");
             }
         }
 
@@ -79,7 +165,7 @@ namespace hubservice
 
             var targetDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
 
-            Console.WriteLine($"Cloning '{packageName} into '{targetDir}'");
+            _logger.LogInformation($"Cloning '{packageName} into '{targetDir}'");
 
             try
             {
@@ -87,7 +173,7 @@ namespace hubservice
             }
             catch
             {
-                Console.WriteLine($"Failed to clone '{packageName}'");
+                _logger.LogError($"Failed to clone '{packageName}'");
                 return null;
             }
         }

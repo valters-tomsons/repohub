@@ -6,4 +6,4 @@
 .vscode/settings.json
 
 # Local files
-appsettings.Development.json
+local.appsettings.json
