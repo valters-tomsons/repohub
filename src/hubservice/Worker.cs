@@ -43,7 +43,7 @@ namespace hubservice
                 var packagesDef = JsonConvert.DeserializeObject<List<ArchDefinition>>(packagesContent);
 
                 var packages = BuildArchPackageIndex(packagesDef, Arch.x86_64);
-                var pkg = packages.ElementAt(5);
+                var pkg = packages.FirstOrDefault(x => x.Name == "paru");
 
                 var path = ClonePackageRepository(pkg);
 
@@ -84,13 +84,12 @@ namespace hubservice
             await _storage.DownloadFileToDisk($"{repo}/faith-arch.files", $"{localRepo}/faith-arch.files").ConfigureAwait(false);
             await _storage.DownloadFileToDisk($"{repo}/faith-arch.files.tar.gz", $"{localRepo}/faith-arch.files.tar.gz").ConfigureAwait(false);
 
-            Directory.SetCurrentDirectory(localRepo);
-
             var repoAdd = new Process(){
                 StartInfo = new ProcessStartInfo()
                 {
                     FileName = "/usr/bin/repo-add",
-                    Arguments = $"./faith-arch.db.tar.gz {packagePath.LocalPath}"
+                    Arguments = $"./faith-arch.db.tar.gz {packagePath.LocalPath}",
+                    WorkingDirectory = localRepo
                 }
             };
 
@@ -186,7 +185,7 @@ namespace hubservice
             var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
             var packageDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
 
-            Directory.SetCurrentDirectory(packageDir);
+            // Directory.SetCurrentDirectory(packageDir);
 
             var pkgdest = $"{home}/.local/share/repohub/packages/";
             Environment.SetEnvironmentVariable("PKGDEST", pkgdest);
@@ -195,7 +194,8 @@ namespace hubservice
                 StartInfo = new ProcessStartInfo()
                 {
                     FileName = "/usr/bin/makepkg",
-                    Arguments = "--clean"
+                    Arguments = "--clean",
+                    WorkingDirectory = packageDir
                 }
             };
 
@@ -204,19 +204,20 @@ namespace hubservice
             await makePkg.WaitForExitAsync();
             makePkg.WaitForExit();
 
-            var pkgPath = await PackageList();
+            var pkgPath = await PackageList(packageDir);
 
             return new Uri(pkgPath, UriKind.Absolute);
         }
 
-        private async Task<string> PackageList()
+        private async Task<string> PackageList(string packageDir)
         {
             var pkgList = new Process(){
                 StartInfo = new ProcessStartInfo()
                 {
                     FileName = "/usr/bin/makepkg",
                     Arguments = "--packagelist",
-                    RedirectStandardOutput = true
+                    RedirectStandardOutput = true,
+                    WorkingDirectory = packageDir
                 }
             };
 
@@ -231,6 +232,17 @@ namespace hubservice
             pkgList.WaitForExit();
 
             return pkgResult.ToString();
+        }
+
+        private Uri GetPackageBuildDir(PackageDefinition package)
+        {
+            var packageName = package.Name;
+
+            var home = Environment.GetEnvironmentVariable("HOME");
+            var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
+            var packageDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
+
+            return new Uri(packageDir, UriKind.Absolute);
         }
     }
 }
