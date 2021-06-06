@@ -14,9 +14,8 @@ namespace hubservice
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
                 .UseSystemd()
-                .ConfigureServices((hostContext, services) =>
+                .ConfigureServices((_, services) =>
                 {
-                    services.AddSingleton(hostContext.Configuration);
                     services.AddHostedService<Worker>();
                     services.AddTransient<AzureStorageProvider>();
                 });
