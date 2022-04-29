@@ -3,17 +3,25 @@
         "arch": "x86_64",
         "aurPackages": [
             "dsbattery",
-            "plex-media-server"
+            "plex-media-server",
+            "visual-studio-code-bin",
+            "eparakstitajs3",
+            "cemu",
+            "trenchbroom-git",
+            "paru",
+            "samrewritten-git",
+            "godot-mono-git"
         ],
-        "pkgGit": [
-            "https://aur.archlinux.org/plex-media-server.git"
-        ]
+        "pkgGit": []
     },
     {
         "arch": "aarch64",
         "aurPackages": [
             "dsbattery",
-            "plex-media-server"
+            "plex-media-server",
+            "visual-studio-code-bin",
+            "argonone-c-git",
+            "box86"
         ],
         "pkgGit": [
             "https://gitlab.manjaro.org/manjaro-arm/packages/extra/plymouth.git"
