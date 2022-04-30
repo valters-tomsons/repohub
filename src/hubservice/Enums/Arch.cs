@@ -1,8 +1,7 @@
-namespace hubservice.Enums
+namespace hubservice.Enums;
+
+public enum Arch
 {
-    public enum Arch
-    {
-        x86_64,
-        aarch64
-    }
+	x86_64,
+	aarch64
 }

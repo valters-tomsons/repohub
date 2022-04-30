@@ -7,109 +7,110 @@ using hubservice.Models;
 using LibGit2Sharp;
 using Microsoft.Extensions.Logging;
 
-namespace hubservice.Services
+namespace hubservice.Services;
+
+public class BuildService
 {
-    public class BuildService
-    {
-        private readonly ILogger<BuildService> _logger;
+	private readonly ILogger<BuildService> _logger;
 
-        public BuildService(ILogger<BuildService> logger)
-        {
-            _logger = logger;
-        }
+	public BuildService(ILogger<BuildService> logger)
+	{
+		_logger = logger;
+	}
 
-        public async Task<Uri?> BuildPackageFromDefinition(PackageDefinition package)
-        {
-            var repositoryPath = CloneRepository(package);
+	public async Task<Uri?> BuildPackageFromDefinition(PackageDefinition package)
+	{
+		var repositoryPath = CloneRepository(package);
 
-			if (string.IsNullOrWhiteSpace(repositoryPath))
-            {
-                return null;
-            }
+		if (string.IsNullOrWhiteSpace(repositoryPath))
+		{
+			return null;
+		}
 
-            return await MakePackage(package);
-        }
+		return await MakePackage(package);
+	}
 
-        private string? CloneRepository(PackageDefinition package)
-        {
-            var home = Environment.GetEnvironmentVariable("HOME");
+	private string? CloneRepository(PackageDefinition package)
+	{
+		var home = Environment.GetEnvironmentVariable("HOME");
 
-            var packageName = package.Name;
-            var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
+		var packageName = package.Name;
+		var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
 
-            var targetDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
+		var targetDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
 
-            _logger.LogInformation($"Cloning '{packageName} into '{targetDir}'");
+		_logger.LogInformation($"Cloning '{packageName} into '{targetDir}'");
 
-            var cloneOptions = new CloneOptions()
-            {
-                RecurseSubmodules = true,
-            };
+		var cloneOptions = new CloneOptions()
+		{
+			RecurseSubmodules = true,
+		};
 
-            try
-            {
-                return Repository.Clone(package.Source, targetDir, cloneOptions);
-            }
-            catch
-            {
-                _logger.LogError($"Failed to clone '{packageName}'");
-                return null;
-            }
-        }
+		try
+		{
+			return Repository.Clone(package.Source, targetDir, cloneOptions);
+		}
+		catch
+		{
+			_logger.LogError($"Failed to clone '{packageName}'");
+			return null;
+		}
+	}
 
-        private async Task<Uri> MakePackage(PackageDefinition package)
-        {
-            var packageName = package.Name;
+	private async Task<Uri> MakePackage(PackageDefinition package)
+	{
+		var packageName = package.Name;
 
-            var home = Environment.GetEnvironmentVariable("HOME");
-            var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
-            var packageDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
+		var home = Environment.GetEnvironmentVariable("HOME");
+		var packageFolder = package.SourceType == SourceType.Aur ? "aur" : "git";
+		var packageDir = $"{home}/.local/share/repohub/{packageFolder}/{packageName}";
 
-            var pkgdest = $"{home}/.local/share/repohub/packages/";
-            Environment.SetEnvironmentVariable("PKGDEST", pkgdest);
+		var pkgdest = $"{home}/.local/share/repohub/packages/";
+		Environment.SetEnvironmentVariable("PKGDEST", pkgdest);
 
-            var makePkg = new Process(){
-                StartInfo = new ProcessStartInfo()
-                {
-                    FileName = "/usr/bin/makepkg",
-                    Arguments = "--clean",
-                    WorkingDirectory = packageDir
-                }
-            };
+		var makePkg = new Process()
+		{
+			StartInfo = new ProcessStartInfo()
+			{
+				FileName = "/usr/bin/makepkg",
+				Arguments = "--clean",
+				WorkingDirectory = packageDir
+			}
+		};
 
-            makePkg.Start();
+		makePkg.Start();
 
-            await makePkg.WaitForExitAsync();
-            makePkg.WaitForExit();
+		await makePkg.WaitForExitAsync();
+		makePkg.WaitForExit();
 
-            var pkgPath = await PackageList(packageDir);
+		var pkgPath = await PackageList(packageDir);
 
-            return new Uri(pkgPath, UriKind.Absolute);
-        }
+		return new Uri(pkgPath, UriKind.Absolute);
+	}
 
-        private async Task<string> PackageList(string packageDir)
-        {
-            var pkgList = new Process(){
-                StartInfo = new ProcessStartInfo()
-                {
-                    FileName = "/usr/bin/makepkg",
-                    Arguments = "--packagelist",
-                    RedirectStandardOutput = true,
-                    WorkingDirectory = packageDir
-                }
-            };
+	private async Task<string> PackageList(string packageDir)
+	{
+		var pkgList = new Process()
+		{
+			StartInfo = new ProcessStartInfo()
+			{
+				FileName = "/usr/bin/makepkg",
+				Arguments = "--packagelist",
+				RedirectStandardOutput = true,
+				WorkingDirectory = packageDir
+			}
+		};
 
-            var pkgResult = new StringBuilder();
-            pkgList.OutputDataReceived += (sender, e) => pkgResult.Append(e.Data);
+		var pkgResult = new StringBuilder();
+		pkgList.OutputDataReceived += (sender, e) => pkgResult.Append(e.Data);
 
-            pkgList.Start();
+		pkgList.Start();
 
-            pkgList.BeginOutputReadLine();
+		pkgList.BeginOutputReadLine();
 
-            await pkgList.WaitForExitAsync();
-            pkgList.WaitForExit();
+		await pkgList.WaitForExitAsync();
+		pkgList.WaitForExit();
 
-            return pkgResult.ToString();
-        }
-    }
+		return pkgResult.ToString();
+	}
 }

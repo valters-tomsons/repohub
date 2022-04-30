@@ -1,8 +1,7 @@
-namespace hubservice.Enums
+namespace hubservice.Enums;
+
+public enum SourceType
 {
-    public enum SourceType
-    {
-        Aur,
-        Git
-    }
+	Aur,
+	Git
 }
