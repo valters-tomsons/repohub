@@ -12,8 +12,8 @@ public class AzureStorageProvider
 	private const string ContainerName = "$web";
 
 	private readonly CloudStorageAccount storageAccount;
-	private CloudBlobClient client;
-	private CloudBlobContainer container;
+	private CloudBlobClient? client;
+	private CloudBlobContainer? container;
 
 	public AzureStorageProvider(IConfiguration config)
 	{
@@ -23,8 +23,14 @@ public class AzureStorageProvider
 
 	public async Task<DateTimeOffset?> GetLastModified(string fileName)
 	{
-		var blob = container.GetBlockBlobReference(fileName);
-		var exists = await blob.ExistsAsync().ConfigureAwait(false);
+		var blob = container?.GetBlockBlobReference(fileName);
+
+		if (blob is null)
+		{
+			return null;
+		}
+
+		var exists = await blob.ExistsAsync();
 
 		if (!exists)
 		{
@@ -32,13 +38,18 @@ public class AzureStorageProvider
 		}
 
 		await blob.FetchAttributesAsync().ConfigureAwait(false);
-
 		return blob.Properties.LastModified;
 	}
 
-	public async Task<byte[]> ReadBytesFromStorage(string fileName)
+	public async Task<byte[]?> ReadBytesFromStorage(string fileName)
 	{
-		var blob = container.GetBlockBlobReference(fileName);
+		var blob = container?.GetBlockBlobReference(fileName);
+
+		if (blob is null)
+        {
+            return null;
+        }
+
 		var exists = await blob.ExistsAsync().ConfigureAwait(false);
 
 		if (!exists)
@@ -64,29 +75,51 @@ public class AzureStorageProvider
 		}
 	}
 
-	public async Task WriteDataToStorage(string fileName, byte[] buffer)
+	public async Task<bool> WriteDataToStorage(string fileName, byte[] buffer)
 	{
-		var blob = container.GetBlockBlobReference(fileName);
+		var blob = container?.GetBlockBlobReference(fileName);
+
+		if (blob is null)
+        {
+            return false;
+        }
+
 		blob.Properties.ContentType = "application/octet-stream";
 		await blob.UploadFromByteArrayAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+
+        return true;
 	}
 
-	public async Task WriteFileToStorage(string fileName, string localPath)
+	public async Task<bool> WriteFileToStorage(string fileName, string localPath)
 	{
-		var blob = container.GetBlockBlobReference(fileName);
+		var blob = container?.GetBlockBlobReference(fileName);
+
+		if (blob is null)
+        {
+            return false;
+        }
+
 		blob.Properties.ContentType = "application/octet-stream";
 		await blob.UploadFromFileAsync(localPath).ConfigureAwait(false);
+
+        return true;
 	}
 
 	public async Task<bool> FileExists(string fileName)
 	{
-		var blob = container.GetBlockBlobReference(fileName);
-		return await blob.ExistsAsync().ConfigureAwait(false);
+		var blob = container?.GetBlockBlobReference(fileName);
+
+        if(blob is null)
+        {
+            return false;
+        }
+
+		return await blob.ExistsAsync();
 	}
 
 	public async Task InitializeStorage()
 	{
-		if (client != null)
+		if (client is not null)
 		{
 			return;
 		}
