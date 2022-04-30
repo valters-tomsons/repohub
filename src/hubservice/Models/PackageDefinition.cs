@@ -21,8 +21,8 @@ public class PackageDefinition
 		SourceType = sourceType;
 	}
 
-	public string Name { get; set; }
-	public string Source { get; set; }
+	public string Name { get; set; } = string.Empty;
+	public string Source { get; set; } = string.Empty;
 
 	public Arch Arch { get; set; }
 	public SourceType SourceType { get; set; }

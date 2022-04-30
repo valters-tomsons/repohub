@@ -41,8 +41,18 @@ public class Worker : BackgroundService
 			var packagesContent = await File.ReadAllTextAsync(_config.GetValue<string>("packages.json"), Encoding.UTF8, stoppingToken);
 			var packagesDef = JsonConvert.DeserializeObject<List<ArchDefinition>>(packagesContent);
 
+			if (packagesDef is null || packagesDef.Count < 1)
+			{
+				return;
+			}
+
 			var packages = BuildLocalPackageIndex(packagesDef, Arch.x86_64);
 			var pkg = packages.FirstOrDefault(x => x.Name == "paru");
+
+			if (pkg is null)
+			{
+				return;
+			}
 
 			var pkgPath = await _buildService.BuildPackageFromDefinition(pkg);
 
@@ -59,9 +69,14 @@ public class Worker : BackgroundService
 		}
 	}
 
-	private IEnumerable<PackageDefinition> BuildLocalPackageIndex(IEnumerable<ArchDefinition> definition, Arch targetArch)
+	private static IEnumerable<PackageDefinition> BuildLocalPackageIndex(IEnumerable<ArchDefinition> definition, Arch targetArch)
 	{
 		var targetDef = definition.SingleOrDefault(x => x.Arch == targetArch);
+
+		if (targetDef is null)
+		{
+			return Enumerable.Empty<PackageDefinition>();
+		}
 
 		var result = new List<PackageDefinition>();
 
