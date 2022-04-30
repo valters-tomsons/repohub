@@ -11,10 +11,6 @@
     <PublishReadyToRunShowWarnings>true</PublishReadyToRunShowWarnings>
     <PublishSingleFile>true</PublishSingleFile>
     <InvariantGlobalization>true</InvariantGlobalization>
-
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>Link</TrimMode>
-
   </PropertyGroup>
 
   <ItemGroup>
