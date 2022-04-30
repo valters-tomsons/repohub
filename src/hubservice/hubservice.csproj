@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <UserSecretsId>dotnet-hubservice-CE4165F8-24AD-4892-94EE-5ABEA8CED492</UserSecretsId>
     <RuntimeIdentifiers>linux-x64;linux-arm64</RuntimeIdentifiers>
 

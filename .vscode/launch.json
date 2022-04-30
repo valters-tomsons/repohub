@@ -6,7 +6,7 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build_x64",
-            "program": "${workspaceFolder}/src/hubservice/bin/Debug/net5.0/linux-x64/hubservice.dll",
+            "program": "${workspaceFolder}/src/hubservice/bin/Debug/net6.0/linux-x64/hubservice.dll",
             "args": [],
             "cwd": "${workspaceFolder}/src/hubservice",
             "console": "internalConsole",
